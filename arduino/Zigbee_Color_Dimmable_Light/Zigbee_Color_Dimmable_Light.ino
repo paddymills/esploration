@@ -35,25 +35,75 @@
 
 /* Zigbee color dimmable light configuration */
 #define ZIGBEE_RGB_LIGHT_ENDPOINT 10
-uint8_t red_led = RGB_BUILTIN;
-uint8_t green_led = RGB_BUILTIN;
-uint8_t blue_led = RGB_BUILTIN;
+
+#define PIN_ORANGE_0  19
+#define PIN_ORANGE_1  20
+#define PIN_ORANGE_2  18
+#define PIN_ORANGE_3  21
+#define PIN_ORANGE_4  22
+#define PIN_ORANGE_5  23
+#define PIN_ORANGE_6  16
+#define PIN_ORANGE_7  17
+#define PIN_RED       0
+#define PIN_GREEN     1
+#define PIN_BLUE      2
+
+#define BREAD_PIN_ON   HIGH
+#define BREAD_PIN_OFF  LOW
+
+#define ALL_BREAD_GPIO_COUNT 8
+#define ALL_BREAD_ANLG_COUNT 3
+
+uint8_t allBreadGPIOs[ALL_BREAD_GPIO_COUNT] = {
+  PIN_ORANGE_0,
+  PIN_ORANGE_1,
+  PIN_ORANGE_2,
+  PIN_ORANGE_3,
+  PIN_ORANGE_4,
+  PIN_ORANGE_5,
+  PIN_ORANGE_6,
+  PIN_ORANGE_7
+};
+uint8_t allBreadAnalogs[ALL_BREAD_ANLG_COUNT] = {
+  PIN_RED,
+  PIN_GREEN,
+  PIN_BLUE
+};
+
+uint8_t led = LED_BUILTIN;
 uint8_t button = BOOT_PIN;
 
 ZigbeeColorDimmableLight zbColorLight = ZigbeeColorDimmableLight(ZIGBEE_RGB_LIGHT_ENDPOINT);
 
 /********************* RGB LED functions **************************/
 void setRGBLight(bool state, uint8_t red, uint8_t green, uint8_t blue, uint8_t level) {
+  Serial.printf(
+    "setting RGB: state=%s, red=%d, green=%d, blue=%d, level=%d\n",
+    state ? "on" : "off",
+    red,
+    green,
+    blue,
+    level
+  );
   if (!state) {
-    rgbLedWrite(red_led, 0, 0, 0);
-    rgbLedWrite(green_led, 0, 0, 0);
-    rgbLedWrite(blue_led, 0, 0, 0);
+    analogWrite(PIN_GREEN, 0);
+    analogWrite(PIN_GREEN, 0);
+    analogWrite(PIN_BLUE, 0);
     return;
   }
   float brightness = (float)level / 255;
-  rgbLedWrite(red_led, red * brightness, 0, 0);
-  rgbLedWrite(green_led, 0, green * brightness, 0);
-  rgbLedWrite(blue_led, 0, 0, blue * brightness);
+  analogWrite(PIN_RED, (uint8_t)(red * brightness));
+  analogWrite(PIN_GREEN, (uint8_t)(green * brightness));
+  analogWrite(PIN_BLUE, (uint8_t)(blue * brightness));
+
+  // use 8 orange LEDs as binary representation of red channel
+  outputChannelOnLEDs(red);
+}
+
+void outputChannelOnLEDs(uint8_t value) {
+    for (int i = 0; i < ALL_BREAD_GPIO_COUNT; i++) {
+        digitalWrite(allBreadGPIOs[i], (value >> (7 - i)) & 1);
+    }
 }
 
 // Create a task on identify call to handle the identify function
@@ -72,12 +122,22 @@ void identify(uint16_t time) {
 /********************* Arduino functions **************************/
 void setup() {
   Serial.begin(115200);
+  while (!Serial) {
+    delay(10);
+  }
+  Serial.println("Serial ready");
 
   // Init RMT and leave light OFF
   rgbLedWrite(led, 0, 0, 0);
 
   // Init button for factory reset
   pinMode(button, INPUT_PULLUP);
+
+  // Init breadboard LEDs
+  setupBreadLEDs(50);
+
+  // init RGB
+  setRGBLight(true, 170, 170, 170, 255);
 
   // Set callback function for light change
   zbColorLight.onLightChange(setRGBLight);
@@ -104,6 +164,26 @@ void setup() {
     delay(100);
   }
   Serial.println();
+}
+
+// ----------------------------------------------------------------------------
+// -- RGB LED functions
+void setupBreadLEDs(uint flashSpeed) {
+  uint pin;
+  for (pin=0; pin<ALL_BREAD_GPIO_COUNT; pin++) {
+    pinMode(allBreadGPIOs[pin], OUTPUT);
+    digitalWrite(allBreadGPIOs[pin], BREAD_PIN_ON);
+    delay(flashSpeed);
+    digitalWrite(allBreadGPIOs[pin], BREAD_PIN_OFF);
+    delay(flashSpeed);
+  }
+  for (pin=0; pin<ALL_BREAD_ANLG_COUNT; pin++) {
+    pinMode(allBreadAnalogs[pin], OUTPUT);
+    analogWrite(allBreadAnalogs[pin], 255);
+    delay(flashSpeed);
+    analogWrite(allBreadAnalogs[pin], 0);
+    delay(flashSpeed);
+  }
 }
 
 void loop() {
